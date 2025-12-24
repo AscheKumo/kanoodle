@@ -360,6 +360,7 @@
   // Constants
   const PREVIEW_CELL_SIZE = 44;
   const PREVIEW_GAP = 2;
+  const MAX_HISTORY_ENTRIES = 50;
 
   // Timer state
   let timerInterval = null;
@@ -786,8 +787,8 @@
         lockedCount: state.lockedIds.size,
         boardState
       });
-      // Keep last 50
-      if (challengeScores.length > 50) challengeScores.shift();
+      // Keep last MAX_HISTORY_ENTRIES
+      if (challengeScores.length > MAX_HISTORY_ENTRIES) challengeScores.shift();
       localStorage.setItem('kanoodle_challenge_scores', JSON.stringify(challengeScores));
     } else {
       // Save regular game completion
@@ -796,8 +797,8 @@
         timestamp,
         boardState
       });
-      // Keep last 50
-      if (gameHistory.length > 50) gameHistory.shift();
+      // Keep last MAX_HISTORY_ENTRIES
+      if (gameHistory.length > MAX_HISTORY_ENTRIES) gameHistory.shift();
       localStorage.setItem('kanoodle_game_history', JSON.stringify(gameHistory));
     }
   };
