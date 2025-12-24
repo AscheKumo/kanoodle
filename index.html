@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Kanoodle – 5×11</title>
+  <style>
+    :root{
+      /* Board cell size */
+      --cell: 44px;
+      --gap: 2px;
+
+      /* Tray piece scale (smaller) */
+      --tray-scale: 0.52;
+
+      --board-bg:#111;
+      --grid-line:#1f1f1f;
+
+      --text:#eaeaea;
+      --muted:#a9a9a9;
+      --panel:#171717;
+      --panel2:#1e1e1e;
+      --accent:#6aa6ff;
+    }
+
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:#0d0d0d;
+      color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      display:flex;
+      justify-content:center;
+    }
+    .wrap{
+      width:min(1100px, 96vw);
+      padding:16px 0 24px;
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:16px;
+      align-items:start;
+    }
+    .panel{
+      background:var(--panel);
+      border:1px solid #262626;
+      border-radius:12px;
+      padding:12px;
+    }
+    h1{margin:0 0 6px; font-size:18px; font-weight:800;}
+    .sub{margin:0 0 12px; color:var(--muted); font-size:13px; line-height:1.4;}
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .btnRow{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+    button, select{
+      background:var(--panel2);
+      color:var(--text);
+      border:1px solid #2a2a2a;
+      border-radius:10px;
+      padding:8px 10px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:13px;
+    }
+    select{cursor:default}
+    button.primary{border-color:#2b4f9b; background:#132041;}
+    button.primary:hover{border-color:#3b6ad0;}
+    button:hover{border-color:#3a3a3a}
+    button:active{transform:translateY(1px)}
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size:12px;
+      padding:1px 6px;
+      border:1px solid #2a2a2a;
+      border-bottom-width:2px;
+      border-radius:7px;
+      background:#0f0f0f;
+      color:#d7d7d7;
+      display:inline-block;
+      margin:0 2px;
+    }
+
+    /* Board */
+    #board{
+      position:relative;
+      width: calc(11 * var(--cell) + 10 * var(--gap));
+      height: calc(5 * var(--cell) + 4 * var(--gap));
+      background:var(--board-bg);
+      border:1px solid #2a2a2a;
+      border-radius:14px;
+      overflow:hidden;
+      user-select:none;
+      margin-top:10px;
+    }
+    .grid{
+      position:absolute;
+      inset:0;
+      display:grid;
+      grid-template-columns:repeat(11, var(--cell));
+      grid-template-rows:repeat(5, var(--cell));
+      gap:var(--gap);
+      background:var(--grid-line);
+    }
+    .cell{
+      background:#0f0f0f;
+      border-radius:10px;
+    }
+
+    /* Pieces are inside a scroll-following stage */
+    #stage{
+      position:relative;
+      min-height: 1px;
+    }
+
+    .piece{
+      position:absolute;
+      touch-action:none;
+      cursor:grab;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.35));
+      transform-origin: top left;
+      will-change: left, top, transform;
+    }
+    .piece:active{cursor:grabbing}
+    .piece.locked{cursor:not-allowed; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)) saturate(.95); }
+    .piece.locked .dot{ box-shadow: inset 0 0 0 2px rgba(255,255,255,.18), inset 0 -10px 18px rgba(0,0,0,.25); }
+
+    /* Per-dot selection */
+    .piece.selected .dot{
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.10),
+        inset 0 -10px 18px rgba(0,0,0,.25),
+        0 0 0 3px rgba(106,166,255,.35),
+        0 0 18px rgba(106,166,255,.25);
+    }
+    .dot{
+      position:absolute;
+      width:var(--cell);
+      height:var(--cell);
+      border-radius:999px;
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.10),
+        inset 0 -10px 18px rgba(0,0,0,.25);
+    }
+    .piece.invalid .dot{
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.10),
+        inset 0 -10px 18px rgba(0,0,0,.25),
+        0 0 0 3px rgba(255,77,77,.35),
+        0 0 18px rgba(255,77,77,.18);
+    }
+
+    /* Tray */
+    #tray{
+      margin-top:14px;
+      background:#0f0f0f;
+      border:1px solid #262626;
+      border-radius:14px;
+      padding:8px; /* tightened */
+    }
+    #trayInner{
+      position:relative;
+      min-height: 130px;
+    }
+    .status{
+      margin-top:10px;
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.4;
+    }
+    .status strong{color:var(--text)}
+    .win{
+      margin-top:10px;
+      padding:10px 12px;
+      background:#0e1b10;
+      border:1px solid #234a2b;
+      color:#cfead5;
+      border-radius:12px;
+      display:none;
+      font-weight:800;
+    }
+    .note{
+      margin-top:10px;
+      padding:10px 12px;
+      background:#141414;
+      border:1px solid #2a2a2a;
+      border-radius:12px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.4;
+    }
+    @media (max-width: 720px){
+      :root{ --cell: 38px; --tray-scale: 0.48; }
+      #trayInner{ min-height: 160px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel" id="stage">
+      <div class="row">
+        <div>
+          <h1>Kanoodle – 5×11</h1>
+          <div class="sub">
+            Drag pieces from the tray. On the tray pieces are smaller; on the board they snap to full size.
+            Keys: <span class="kbd">R</span> rotate, <span class="kbd">F</span> flip.
+          </div>
+        </div>
+        <div class="btnRow">
+          <button id="btnRotate" title="Rotate selected (R)">Rotate (R)</button>
+          <button id="btnFlip" title="Flip selected (F)">Flip (F)</button>
+
+          <select id="challengeCount" title="How many pieces to pre-place">
+            <option value="1">Challenge: 1 piece</option>
+            <option value="2">Challenge: 2 pieces</option>
+            <option value="3">Challenge: 3 pieces</option>
+          </select>
+          <button id="btnChallenge" class="primary" title="Generate a solvable random challenge">Challenge</button>
+
+          <button id="btnReset" title="Reset pieces to tray">Reset</button>
+        </div>
+      </div>
+
+      <div id="board" aria-label="Board">
+        <div class="grid" id="grid"></div>
+      </div>
+
+      <div class="win" id="win">All pieces placed validly.</div>
+
+      <div id="tray" aria-label="Tray">
+        <div class="sub" style="margin:0 0 8px;">Tray (pieces shrink here; grow when placed on board)</div>
+        <div id="trayInner"></div>
+      </div>
+
+      <div class="status" id="status"></div>
+      <div class="note">
+        Challenge generation: the solver finds a full non-overlapping placement of all pieces,
+        then locks 1–3 random pieces from that solution (guaranteed solvable).
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const ROWS = 5, COLS = 11;
+
+  const PIECES = [
+    { id: "blue",     color: "#1f37ff", cells: [[0,0],[1,0],[0,1],[0,2],[0,3]] },
+    { id: "gray",     color: "#737373", cells: [[1,0],[0,1],[1,1],[2,1],[1,2]] },
+    { id: "green",    color: "#31fe16", cells: [[0,0],[0,1],[1,1],[1,2],[1,3]] },
+    { id: "red",      color: "#ff0000", cells: [[0,0],[1,0],[2,0],[0,1],[1,1]] },
+    { id: "lavender", color: "#cf75e1", cells: [[0,0],[1,0],[1,1],[2,1],[2,2]] },
+    { id: "lime",     color: "#93bf8d", cells: [[0,0],[0,1],[1,1]] },
+    { id: "orange",   color: "#dc9804", cells: [[0,0],[1,0],[0,1],[0,2]] },
+    { id: "peach",    color: "#ff8f8f", cells: [[1,0],[0,1],[1,1],[1,2],[1,3]] },
+    { id: "purple",   color: "#a000cc", cells: [[0,0],[0,1],[0,2],[0,3]] },
+    { id: "teal",     color: "#8ffffd", cells: [[0,0],[1,0],[2,0],[0,1],[0,2]] },
+    { id: "white",    color: "#ffffff", cells: [[0,0],[1,0],[0,1],[1,1]] },
+    { id: "yellow",   color: "#f5ef3d", cells: [[0,0],[1,0],[2,0],[0,1],[2,1]] }
+  ];
+
+  const docStyle = () => getComputedStyle(document.documentElement);
+  const cellPx = () => parseFloat(docStyle().getPropertyValue('--cell')) || 44;
+  const gapPx  = () => parseFloat(docStyle().getPropertyValue('--gap')) || 2;
+  const trayScale = () => parseFloat(docStyle().getPropertyValue('--tray-scale')) || 0.52;
+
+  const stageEl = document.getElementById('stage');
+  const boardEl = document.getElementById('board');
+  const gridEl  = document.getElementById('grid');
+  const trayInner = document.getElementById('trayInner');
+  const statusEl = document.getElementById('status');
+  const winEl = document.getElementById('win');
+
+  for (let i=0;i<ROWS*COLS;i++){
+    const c = document.createElement('div');
+    c.className = 'cell';
+    gridEl.appendChild(c);
+  }
+
+  const rect = (el) => el.getBoundingClientRect();
+  const stageRect = () => rect(stageEl);
+  const boardRect = () => rect(boardEl);
+  const trayRect = () => rect(trayInner);
+
+  const toStageXY = (clientX, clientY) => {
+    const sr = stageRect();
+    return { x: clientX - sr.left, y: clientY - sr.top };
+  };
+
+  const normalize = (cells) => {
+    let minX = Infinity, minY = Infinity;
+    for (const [x,y] of cells) { if (x<minX) minX=x; if (y<minY) minY=y; }
+    return cells.map(([x,y]) => [x-minX, y-minY]);
+  };
+  const rotate90 = (cells) => normalize(cells.map(([x,y]) => [y, -x]));
+  const flipX = (cells) => normalize(cells.map(([x,y]) => [-x, y]));
+  const cellsKey = (cells) => normalize(cells).slice().sort((a,b)=>a[1]-b[1]||a[0]-b[0]).map(([x,y])=>`${x}:${y}`).join('|');
+
+  const uniqueOrientations = (baseCells) => {
+    const seen = new Set();
+    const out = [];
+    let c = normalize(baseCells);
+    for (let i=0;i<4;i++){
+      const k = cellsKey(c);
+      if (!seen.has(k)) { seen.add(k); out.push(c); }
+      c = rotate90(c);
+    }
+    let f = flipX(baseCells);
+    for (let i=0;i<4;i++){
+      const k = cellsKey(f);
+      if (!seen.has(k)) { seen.add(k); out.push(f); }
+      f = rotate90(f);
+    }
+    return out;
+  };
+
+  const bbox = (cells) => {
+    let maxX=0, maxY=0;
+    for (const [x,y] of cells){ if (x>maxX) maxX=x; if (y>maxY) maxY=y; }
+    return { w:maxX+1, h:maxY+1 };
+  };
+
+  const state = {
+    selectedId: null,
+    pieces: new Map(),
+    lockedIds: new Set(),
+  };
+
+  const setPiecePosStage = (p, x, y) => {
+    p.x = x; p.y = y;
+    p.el.style.left = x + 'px';
+    p.el.style.top  = y + 'px';
+  };
+
+  const setPieceScale = (p, scale) => {
+    p.scale = scale;
+    p.el.style.transform = `scale(${scale})`;
+  };
+
+  const renderPieceDots = (p) => {
+    const c = cellPx(), g = gapPx();
+    for (let i=0;i<p.cells.length;i++){
+      const [x,y] = p.cells[i];
+      const dot = p.dots[i];
+      dot.style.left = (x*(c+g)) + 'px';
+      dot.style.top  = (y*(c+g)) + 'px';
+    }
+    const bb = bbox(p.cells);
+    p.el.style.width  = (bb.w*(c+g) - g) + 'px';
+    p.el.style.height = (bb.h*(c+g) - g) + 'px';
+  };
+
+  const makePieceEl = (def) => {
+    const el = document.createElement('div');
+    el.className = 'piece';
+    el.dataset.id = def.id;
+    const dots = [];
+    for (let i=0;i<def.cells.length;i++){
+      const d = document.createElement('div');
+      d.className = 'dot';
+      d.style.background = def.color;
+      el.appendChild(d);
+      dots.push(d);
+    }
+    stageEl.appendChild(el);
+    return { el, dots };
+  };
+
+  const markValidity = (p, ok) => p.el.classList.toggle('invalid', !ok);
+
+  const setLocked = (id, locked) => {
+    const p = state.pieces.get(id);
+    if (!p) return;
+    if (locked) state.lockedIds.add(id); else state.lockedIds.delete(id);
+    p.el.classList.toggle('locked', locked);
+  };
+
+  const clearLocks = () => {
+    for (const id of [...state.lockedIds]) setLocked(id, false);
+    state.lockedIds.clear();
+  };
+
+  const selectPiece = (id) => {
+    state.selectedId = id;
+    for (const p of state.pieces.values()) {
+      p.el.classList.toggle('selected', p.def.id === id);
+    }
+  };
+
+  const occupiedMap = () => {
+    const occ = new Map();
+    for (const p of state.pieces.values()) {
+      if (!p.onBoard) continue;
+      for (const [dx,dy] of p.cells) {
+        const c = p.boardCol + dx;
+        const r = p.boardRow + dy;
+        occ.set(`${c},${r}`, p.def.id);
+      }
+    }
+    return occ;
+  };
+
+  const canPlaceAt = (p, col, row, occOverride) => {
+    const occ = occOverride ?? occupiedMap();
+    for (const [dx,dy] of p.cells) {
+      const c = col + dx, r = row + dy;
+      if (c<0||c>=COLS||r<0||r>=ROWS) return false;
+      const owner = occ.get(`${c},${r}`);
+      if (owner && owner !== p.def.id) return false;
+    }
+    return true;
+  };
+
+  const isOverBoard = (clientX, clientY) => {
+    const br = boardRect();
+    return clientX >= br.left && clientX <= br.right && clientY >= br.top && clientY <= br.bottom;
+  };
+
+  const stageBoardOrigin = () => {
+    const sr = stageRect();
+    const br = boardRect();
+    return { x: br.left - sr.left, y: br.top - sr.top };
+  };
+
+  const pageToBoardCellFromStageTopLeft = (stageX, stageY) => {
+    const {x:bx, y:by} = stageBoardOrigin();
+    const step = cellPx() + gapPx();
+    const col = Math.round((stageX - bx) / step);
+    const row = Math.round((stageY - by) / step);
+    return { col, row };
+  };
+
+  const snapToBoard = (p, col, row) => {
+    const {x:bx, y:by} = stageBoardOrigin();
+    const step = cellPx() + gapPx();
+    p.onBoard = true;
+    p.boardCol = col;
+    p.boardRow = row;
+    setPieceScale(p, 1);
+    setPiecePosStage(p, bx + col*step, by + row*step);
+  };
+
+  const moveToTrayHome = (p) => {
+    const tr = trayRect();
+    const sr = stageRect();
+    const trayX = (tr.left - sr.left) + p.homeX;
+    const trayY = (tr.top - sr.top) + p.homeY;
+    p.onBoard = false;
+    p.boardCol = null;
+    p.boardRow = null;
+    setPieceScale(p, trayScale());
+    setPiecePosStage(p, trayX, trayY);
+    markValidity(p, true);
+  };
+
+  const layoutTray = () => {
+    // tighter packing: smaller padding and spacing
+    const padding = 6;
+    const maxW = trayInner.clientWidth - padding*2;
+
+    let x = padding, y = padding, rowH = 0;
+
+    const s = trayScale();
+    const c = cellPx(), g = gapPx();
+
+    for (const def of PIECES) {
+      const p = state.pieces.get(def.id);
+      const bb = bbox(p.cells);
+      const w = (bb.w*(c+g) - g) * s;
+      const h = (bb.h*(c+g) - g) * s;
+
+      if (x + w > padding + maxW) {
+        x = padding;
+        y += rowH + 8;   // tighter row spacing
+        rowH = 0;
+      }
+      p.homeX = x;
+      p.homeY = y;
+
+      if (!p.onBoard) moveToTrayHome(p);
+
+      x += w + 8;        // tighter column spacing
+      rowH = Math.max(rowH, h);
+    }
+    trayInner.style.minHeight = (y + rowH + padding) + 'px';
+  };
+
+  const rotateSelected = () => {
+    const p = state.pieces.get(state.selectedId);
+    if (!p || state.lockedIds.has(p.def.id)) return;
+    p.cells = rotate90(p.cells);
+    renderPieceDots(p);
+    if (p.onBoard) markValidity(p, canPlaceAt(p, p.boardCol, p.boardRow));
+    layoutTray();
+    checkWin();
+  };
+
+  const flipSelected = () => {
+    const p = state.pieces.get(state.selectedId);
+    if (!p || state.lockedIds.has(p.def.id)) return;
+    p.cells = flipX(p.cells);
+    renderPieceDots(p);
+    if (p.onBoard) markValidity(p, canPlaceAt(p, p.boardCol, p.boardRow));
+    layoutTray();
+    checkWin();
+  };
+
+  const checkWin = () => {
+    const occ = occupiedMap();
+    const filled = occ.size;
+    const target = ROWS*COLS;
+    const placed = [...state.pieces.values()].filter(p=>p.onBoard).length;
+    const anyInvalid = [...state.pieces.values()].some(p=>p.onBoard && !canPlaceAt(p, p.boardCol, p.boardRow));
+    const ok = placed === state.pieces.size && !anyInvalid;
+    winEl.style.display = ok ? 'block' : 'none';
+    statusEl.innerHTML =
+      `<strong>Filled:</strong> ${filled}/${target} &nbsp; ` +
+      `<strong>Pieces on board:</strong> ${placed}/${state.pieces.size} &nbsp; ` +
+      `<strong>Total dots:</strong> ${PIECES.reduce((n,p)=>n+p.cells.length,0)} &nbsp;` +
+      `<strong>Locked:</strong> ${state.lockedIds.size}`;
+  };
+
+  // Init pieces
+  for (const def of PIECES) {
+    const {el, dots} = makePieceEl(def);
+    const p = {
+      def,
+      el,
+      dots,
+      cells: normalize(def.cells),
+      onBoard: false,
+      boardCol: null,
+      boardRow: null,
+      homeX: 0,
+      homeY: 0,
+      scale: trayScale(),
+      dragging: false,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+      lastValid: null
+    };
+    renderPieceDots(p);
+    setPieceScale(p, trayScale());
+    state.pieces.set(def.id, p);
+  }
+
+  // Dragging
+  const pointerDown = (e) => {
+    const el = e.target.closest('.piece');
+    if (!el) return;
+
+    const id = el.dataset.id;
+    const p = state.pieces.get(id);
+    if (!p) return;
+
+    selectPiece(id);
+    if (state.lockedIds.has(id)) return;
+
+    p.dragging = true;
+    p.el.setPointerCapture?.(e.pointerId);
+
+    const sp = toStageXY(e.clientX, e.clientY);
+    p.dragOffsetX = sp.x - p.x;
+    p.dragOffsetY = sp.y - p.y;
+
+    p.lastValid = { onBoard: p.onBoard, col: p.boardCol, row: p.boardRow };
+    p.el.style.zIndex = '5';
+  };
+
+  const pointerMove = (e) => {
+    const p = state.pieces.get(state.selectedId);
+    if (!p || !p.dragging) return;
+
+    const sp = toStageXY(e.clientX, e.clientY);
+    const nx = sp.x - p.dragOffsetX;
+    const ny = sp.y - p.dragOffsetY;
+
+    if (isOverBoard(e.clientX, e.clientY)) setPieceScale(p, 1);
+    else setPieceScale(p, trayScale());
+
+    setPiecePosStage(p, nx, ny);
+
+    if (isOverBoard(e.clientX, e.clientY)) {
+      const {col,row} = pageToBoardCellFromStageTopLeft(nx, ny);
+      markValidity(p, canPlaceAt(p, col, row));
+    } else {
+      markValidity(p, true);
+    }
+  };
+
+  const pointerUp = (e) => {
+    const p = state.pieces.get(state.selectedId);
+    if (!p || !p.dragging) return;
+
+    p.dragging = false;
+    p.el.style.zIndex = '';
+
+    if (isOverBoard(e.clientX, e.clientY)) {
+      const {col,row} = pageToBoardCellFromStageTopLeft(p.x, p.y);
+      if (canPlaceAt(p, col, row)) {
+        snapToBoard(p, col, row);
+        markValidity(p, true);
+      } else {
+        if (p.lastValid?.onBoard) snapToBoard(p, p.lastValid.col, p.lastValid.row);
+        else moveToTrayHome(p);
+        markValidity(p, true);
+      }
+    } else {
+      moveToTrayHome(p);
+    }
+
+    layoutTray();
+    checkWin();
+  };
+
+  stageEl.addEventListener('pointerdown', pointerDown);
+  stageEl.addEventListener('pointermove', pointerMove);
+  stageEl.addEventListener('pointerup', pointerUp);
+  stageEl.addEventListener('pointercancel', pointerUp);
+
+  // Reset
+  const resetAllToTray = () => {
+    clearLocks();
+    for (const p of state.pieces.values()) {
+      p.onBoard = false;
+      p.boardCol = null;
+      p.boardRow = null;
+      p.cells = normalize(p.def.cells);
+      renderPieceDots(p);
+      setPieceScale(p, trayScale());
+    }
+    layoutTray();
+    for (const p of state.pieces.values()) moveToTrayHome(p);
+    checkWin();
+  };
+
+  // Solver-based challenge
+  const shuffleInPlace = (arr) => {
+    for (let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+  };
+
+  const ORIENTS = new Map();
+  for (const def of PIECES) ORIENTS.set(def.id, uniqueOrientations(def.cells));
+
+  const inBoundsPlacements = () => {
+    const bit = (idx) => (1n << BigInt(idx));
+    const placements = new Map();
+    for (const def of PIECES) {
+      const list = [];
+      for (const cells of ORIENTS.get(def.id)) {
+        const bb = bbox(cells);
+        for (let row=0; row<=ROWS-bb.h; row++){
+          for (let col=0; col<=COLS-bb.w; col++){
+            let mask = 0n;
+            for (const [dx,dy] of cells) {
+              const c = col + dx, r = row + dy;
+              mask |= bit(r*COLS + c);
+            }
+            list.push({ pieceId:def.id, col, row, cells: normalize(cells), mask });
+          }
+        }
+      }
+      shuffleInPlace(list);
+      placements.set(def.id, list);
+    }
+    return placements;
+  };
+
+  const solveNonOverlappingAllPieces = (timeBudgetMs = 550) => {
+    const start = performance.now();
+    const allPlacements = inBoundsPlacements();
+    const pieceIds = PIECES.map(p=>p.id).sort((a,b)=>allPlacements.get(a).length - allPlacements.get(b).length);
+    const used = { v: 0n };
+    const chosen = new Map();
+
+    const dfs = (idx) => {
+      if (performance.now() - start > timeBudgetMs) return false;
+      if (idx >= pieceIds.length) return true;
+
+      const id = pieceIds[idx];
+      const list = allPlacements.get(id);
+      for (const plc of list) {
+        if ((used.v & plc.mask) !== 0n) continue;
+        used.v |= plc.mask;
+        chosen.set(id, plc);
+        if (dfs(idx+1)) return true;
+        chosen.delete(id);
+        used.v &= ~plc.mask;
+      }
+      return false;
+    };
+
+    return dfs(0) ? chosen : null;
+  };
+
+  const applyPlacementToPiece = (pieceId, placement, lock) => {
+    const p = state.pieces.get(pieceId);
+    if (!p) return;
+    p.cells = normalize(placement.cells);
+    renderPieceDots(p);
+    snapToBoard(p, placement.col, placement.row);
+    markValidity(p, true);
+    setLocked(pieceId, !!lock);
+  };
+
+  const makeChallenge = async (count) => {
+    resetAllToTray();
+
+    let solution = null;
+    for (let attempt=0; attempt<40; attempt++){
+      solution = solveNonOverlappingAllPieces(650);
+      if (solution) break;
+      await new Promise(r => setTimeout(r, 0));
+    }
+    if (!solution) {
+      alert("Couldn't generate a solvable challenge quickly. Try again.");
+      return;
+    }
+
+    const ids = [...solution.keys()];
+    shuffleInPlace(ids);
+    const chosenIds = ids.slice(0, Math.max(1, Math.min(3, count)));
+
+    for (const id of chosenIds) applyPlacementToPiece(id, solution.get(id), true);
+
+    for (const def of PIECES) {
+      if (state.lockedIds.has(def.id)) continue;
+      const p = state.pieces.get(def.id);
+      p.onBoard = false;
+      p.boardCol = null;
+      p.boardRow = null;
+      p.cells = normalize(p.def.cells);
+      renderPieceDots(p);
+      setPieceScale(p, trayScale());
+      moveToTrayHome(p);
+    }
+
+    layoutTray();
+    selectPiece(chosenIds[0] || PIECES[0].id);
+    checkWin();
+  };
+
+  // Controls
+  document.getElementById('btnRotate').addEventListener('click', rotateSelected);
+  document.getElementById('btnFlip').addEventListener('click', flipSelected);
+  document.getElementById('btnReset').addEventListener('click', resetAllToTray);
+
+  document.getElementById('btnChallenge').addEventListener('click', async () => {
+    const n = parseInt(document.getElementById('challengeCount').value, 10) || 1;
+    const btn = document.getElementById('btnChallenge');
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = 'Generating...';
+    try { await makeChallenge(n); }
+    finally { btn.disabled = false; btn.textContent = old; }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'r') rotateSelected();
+    if (e.key.toLowerCase() === 'f') flipSelected();
+  });
+
+  // Initial layout
+  selectPiece(PIECES[0].id);
+  const doLayout = () => {
+    layoutTray();
+    for (const p of state.pieces.values()) moveToTrayHome(p);
+    checkWin();
+  };
+
+  window.addEventListener('resize', () => {
+    layoutTray();
+    for (const p of state.pieces.values()) {
+      if (p.onBoard) snapToBoard(p, p.boardCol, p.boardRow);
+      else moveToTrayHome(p);
+    }
+    checkWin();
+  });
+
+  requestAnimationFrame(doLayout);
+})();
+</script>
+</body>
+</html>
