@@ -230,6 +230,10 @@
 
       <div class="win" id="win">All pieces placed validly.</div>
 
+      <div id="timer" style="display:none; margin-top:10px; padding:10px 12px; background:#1a1a2e; border:1px solid #2a3a5a; border-radius:12px; font-size:14px; font-weight:700; color:#8bb9ff;">
+        <span style="color:var(--muted)">Time:</span> <span id="timerDisplay">00:00</span>
+      </div>
+
       <div id="tray" aria-label="Tray">
         <div class="sub" style="margin:0 0 8px;">Tray (pieces shrink here; grow when placed on board)</div>
         <div id="trayInner"></div>
@@ -239,6 +243,16 @@
       <div class="note">
         Challenge generation: the solver finds a full non-overlapping placement of all pieces,
         then locks 1–3 random pieces from that solution (guaranteed solvable).
+      </div>
+
+      <div style="margin-top:16px;">
+        <h1 style="margin-bottom:12px;">Game History</h1>
+        <div class="btnRow" style="margin-bottom:12px;">
+          <button id="btnShowHistory">View Win History</button>
+          <button id="btnShowScores">View Challenge Scores</button>
+          <button id="btnClearHistory">Clear History</button>
+        </div>
+        <div id="historyDisplay" style="display:none; margin-top:12px;"></div>
       </div>
     </div>
   </div>
@@ -273,6 +287,14 @@
   const trayInner = document.getElementById('trayInner');
   const statusEl = document.getElementById('status');
   const winEl = document.getElementById('win');
+  const timerEl = document.getElementById('timer');
+  const timerDisplayEl = document.getElementById('timerDisplay');
+
+  // Timer state
+  let timerInterval = null;
+  let timerStartTime = null;
+  let timerElapsedSeconds = 0;
+  let isChallengeMode = false;
 
   for (let i=0;i<ROWS*COLS;i++){
     const c = document.createElement('div');
@@ -515,7 +537,15 @@
     const placed = [...state.pieces.values()].filter(p=>p.onBoard).length;
     const anyInvalid = [...state.pieces.values()].some(p=>p.onBoard && !canPlaceAt(p, p.boardCol, p.boardRow));
     const ok = placed === state.pieces.size && !anyInvalid;
+    const wasWin = winEl.style.display === 'block';
     winEl.style.display = ok ? 'block' : 'none';
+    
+    // Stop timer and save completion if we just won
+    if (ok && !wasWin) {
+      stopTimer();
+      saveGameCompletion();
+    }
+    
     statusEl.innerHTML =
       `<strong>Filled:</strong> ${filled}/${target} &nbsp; ` +
       `<strong>Pieces on board:</strong> ${placed}/${state.pieces.size} &nbsp; ` +
@@ -624,6 +654,8 @@
   // Reset
   const resetAllToTray = () => {
     clearLocks();
+    hideTimer();
+    isChallengeMode = false;
     for (const p of state.pieces.values()) {
       p.onBoard = false;
       p.boardCol = null;
@@ -635,6 +667,84 @@
     layoutTray();
     for (const p of state.pieces.values()) moveToTrayHome(p);
     checkWin();
+  };
+
+  // Timer functions
+  const startTimer = () => {
+    stopTimer();
+    timerStartTime = Date.now();
+    timerElapsedSeconds = 0;
+    timerEl.style.display = 'block';
+    updateTimerDisplay();
+    timerInterval = setInterval(updateTimerDisplay, 100);
+  };
+
+  const stopTimer = () => {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  };
+
+  const updateTimerDisplay = () => {
+    if (!timerStartTime) return;
+    timerElapsedSeconds = Math.floor((Date.now() - timerStartTime) / 1000);
+    const mins = Math.floor(timerElapsedSeconds / 60);
+    const secs = timerElapsedSeconds % 60;
+    timerDisplayEl.textContent = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+  };
+
+  const hideTimer = () => {
+    stopTimer();
+    timerEl.style.display = 'none';
+    timerElapsedSeconds = 0;
+    timerStartTime = null;
+  };
+
+  // Local storage functions
+  const saveGameCompletion = () => {
+    const timestamp = Date.now();
+    const boardState = captureBoardState();
+    
+    if (isChallengeMode) {
+      // Save challenge score with time
+      const challengeScores = JSON.parse(localStorage.getItem('kanoodle_challenge_scores') || '[]');
+      challengeScores.push({
+        timestamp,
+        time: timerElapsedSeconds,
+        lockedCount: state.lockedIds.size,
+        boardState
+      });
+      // Keep last 50
+      if (challengeScores.length > 50) challengeScores.shift();
+      localStorage.setItem('kanoodle_challenge_scores', JSON.stringify(challengeScores));
+    } else {
+      // Save regular game completion
+      const gameHistory = JSON.parse(localStorage.getItem('kanoodle_game_history') || '[]');
+      gameHistory.push({
+        timestamp,
+        boardState
+      });
+      // Keep last 50
+      if (gameHistory.length > 50) gameHistory.shift();
+      localStorage.setItem('kanoodle_game_history', JSON.stringify(gameHistory));
+    }
+  };
+
+  const captureBoardState = () => {
+    const pieces = [];
+    for (const p of state.pieces.values()) {
+      if (p.onBoard) {
+        pieces.push({
+          id: p.def.id,
+          color: p.def.color,
+          col: p.boardCol,
+          row: p.boardRow,
+          cells: p.cells
+        });
+      }
+    }
+    return pieces;
   };
 
   // Solver-based challenge
@@ -744,6 +854,10 @@
     layoutTray();
     selectPiece(chosenIds[0] || PIECES[0].id);
     checkWin();
+    
+    // Start timer for challenge mode
+    isChallengeMode = true;
+    startTimer();
   };
 
   // Controls
@@ -784,6 +898,98 @@
   });
 
   requestAnimationFrame(doLayout);
+
+  // History display functions
+  const showGameHistory = () => {
+    const history = JSON.parse(localStorage.getItem('kanoodle_game_history') || '[]');
+    const display = document.getElementById('historyDisplay');
+    
+    if (history.length === 0) {
+      display.innerHTML = '<div class="note">No game history yet. Complete a puzzle to save your first win!</div>';
+      display.style.display = 'block';
+      return;
+    }
+    
+    let html = '<div style="display:grid; gap:16px;">';
+    for (let i = history.length - 1; i >= 0; i--) {
+      const entry = history[i];
+      const date = new Date(entry.timestamp).toLocaleString();
+      html += `
+        <div class="panel" style="background:var(--panel2);">
+          <div style="margin-bottom:8px; color:var(--muted); font-size:12px;">${date}</div>
+          <div style="position:relative; width:100%; aspect-ratio:11/5; background:var(--board-bg); border:1px solid #2a2a2a; border-radius:8px; overflow:hidden;">
+            ${renderBoardPreview(entry.boardState)}
+          </div>
+        </div>
+      `;
+    }
+    html += '</div>';
+    display.innerHTML = html;
+    display.style.display = 'block';
+  };
+
+  const showChallengeScores = () => {
+    const scores = JSON.parse(localStorage.getItem('kanoodle_challenge_scores') || '[]');
+    const display = document.getElementById('historyDisplay');
+    
+    if (scores.length === 0) {
+      display.innerHTML = '<div class="note">No challenge scores yet. Complete a challenge to set your first time!</div>';
+      display.style.display = 'block';
+      return;
+    }
+    
+    let html = '<div style="display:grid; gap:16px;">';
+    for (let i = scores.length - 1; i >= 0; i--) {
+      const entry = scores[i];
+      const date = new Date(entry.timestamp).toLocaleString();
+      const mins = Math.floor(entry.time / 60);
+      const secs = entry.time % 60;
+      const timeStr = `${mins}:${secs.toString().padStart(2,'0')}`;
+      html += `
+        <div class="panel" style="background:var(--panel2);">
+          <div style="margin-bottom:8px;">
+            <span style="color:var(--muted); font-size:12px;">${date}</span>
+            <span style="margin-left:12px; color:#8bb9ff; font-weight:700; font-size:14px;">Time: ${timeStr}</span>
+            <span style="margin-left:8px; color:var(--muted); font-size:12px;">(${entry.lockedCount} locked)</span>
+          </div>
+          <div style="position:relative; width:100%; aspect-ratio:11/5; background:var(--board-bg); border:1px solid #2a2a2a; border-radius:8px; overflow:hidden;">
+            ${renderBoardPreview(entry.boardState)}
+          </div>
+        </div>
+      `;
+    }
+    html += '</div>';
+    display.innerHTML = html;
+    display.style.display = 'block';
+  };
+
+  const renderBoardPreview = (boardState) => {
+    const c = 44; // Use fixed cell size for preview
+    const g = 2;
+    let html = '';
+    for (const piece of boardState) {
+      for (const [dx, dy] of piece.cells) {
+        const x = (piece.col + dx) * (c + g);
+        const y = (piece.row + dy) * (c + g);
+        html += `<div style="position:absolute; left:${x}px; top:${y}px; width:${c}px; height:${c}px; background:${piece.color}; border-radius:999px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.10), inset 0 -10px 18px rgba(0,0,0,.25);"></div>`;
+      }
+    }
+    return html;
+  };
+
+  const clearHistory = () => {
+    if (confirm('Clear all game history and challenge scores?')) {
+      localStorage.removeItem('kanoodle_game_history');
+      localStorage.removeItem('kanoodle_challenge_scores');
+      document.getElementById('historyDisplay').style.display = 'none';
+      alert('History cleared!');
+    }
+  };
+
+  // History button handlers
+  document.getElementById('btnShowHistory').addEventListener('click', showGameHistory);
+  document.getElementById('btnShowScores').addEventListener('click', showChallengeScores);
+  document.getElementById('btnClearHistory').addEventListener('click', clearHistory);
 })();
 </script>
 </body>
