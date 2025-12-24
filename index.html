@@ -192,6 +192,52 @@
       font-size:12px;
       line-height:1.4;
     }
+    #timer{
+      margin-top:10px;
+      padding:10px 12px;
+      background:#1a1a2e;
+      border:1px solid #2a3a5a;
+      border-radius:12px;
+      font-size:14px;
+      font-weight:700;
+      color:#8bb9ff;
+    }
+    #timer .label{
+      color:var(--muted);
+    }
+    .historyEntry{
+      background:var(--panel2);
+      padding:12px;
+      border-radius:12px;
+    }
+    .historyDate{
+      margin-bottom:8px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .historyBoard{
+      position:relative;
+      width:100%;
+      aspect-ratio:11/5;
+      background:var(--board-bg);
+      border:1px solid #2a2a2a;
+      border-radius:8px;
+      overflow:hidden;
+    }
+    .scoreInfo{
+      margin-bottom:8px;
+    }
+    .scoreTime{
+      margin-left:12px;
+      color:#8bb9ff;
+      font-weight:700;
+      font-size:14px;
+    }
+    .scoreLocked{
+      margin-left:8px;
+      color:var(--muted);
+      font-size:12px;
+    }
     @media (max-width: 720px){
       :root{ --cell: 38px; --tray-scale: 0.48; }
       #trayInner{ min-height: 160px; }
@@ -230,8 +276,8 @@
 
       <div class="win" id="win">All pieces placed validly.</div>
 
-      <div id="timer" style="display:none; margin-top:10px; padding:10px 12px; background:#1a1a2e; border:1px solid #2a3a5a; border-radius:12px; font-size:14px; font-weight:700; color:#8bb9ff;">
-        <span style="color:var(--muted)">Time:</span> <span id="timerDisplay">00:00</span>
+      <div id="timer" style="display:none;">
+        <span class="label">Time:</span> <span id="timerDisplay">00:00</span>
       </div>
 
       <div id="tray" aria-label="Tray">
@@ -289,6 +335,10 @@
   const winEl = document.getElementById('win');
   const timerEl = document.getElementById('timer');
   const timerDisplayEl = document.getElementById('timerDisplay');
+
+  // Constants
+  const PREVIEW_CELL_SIZE = 44;
+  const PREVIEW_GAP = 2;
 
   // Timer state
   let timerInterval = null;
@@ -676,7 +726,7 @@
     timerElapsedSeconds = 0;
     timerEl.style.display = 'block';
     updateTimerDisplay();
-    timerInterval = setInterval(updateTimerDisplay, 100);
+    timerInterval = setInterval(updateTimerDisplay, 1000);
   };
 
   const stopTimer = () => {
@@ -915,9 +965,9 @@
       const entry = history[i];
       const date = new Date(entry.timestamp).toLocaleString();
       html += `
-        <div class="panel" style="background:var(--panel2);">
-          <div style="margin-bottom:8px; color:var(--muted); font-size:12px;">${date}</div>
-          <div style="position:relative; width:100%; aspect-ratio:11/5; background:var(--board-bg); border:1px solid #2a2a2a; border-radius:8px; overflow:hidden;">
+        <div class="panel historyEntry">
+          <div class="historyDate">${date}</div>
+          <div class="historyBoard">
             ${renderBoardPreview(entry.boardState)}
           </div>
         </div>
@@ -946,13 +996,13 @@
       const secs = entry.time % 60;
       const timeStr = `${mins}:${secs.toString().padStart(2,'0')}`;
       html += `
-        <div class="panel" style="background:var(--panel2);">
-          <div style="margin-bottom:8px;">
-            <span style="color:var(--muted); font-size:12px;">${date}</span>
-            <span style="margin-left:12px; color:#8bb9ff; font-weight:700; font-size:14px;">Time: ${timeStr}</span>
-            <span style="margin-left:8px; color:var(--muted); font-size:12px;">(${entry.lockedCount} locked)</span>
+        <div class="panel historyEntry">
+          <div class="scoreInfo">
+            <span class="historyDate">${date}</span>
+            <span class="scoreTime">Time: ${timeStr}</span>
+            <span class="scoreLocked">(${entry.lockedCount} locked)</span>
           </div>
-          <div style="position:relative; width:100%; aspect-ratio:11/5; background:var(--board-bg); border:1px solid #2a2a2a; border-radius:8px; overflow:hidden;">
+          <div class="historyBoard">
             ${renderBoardPreview(entry.boardState)}
           </div>
         </div>
@@ -964,8 +1014,8 @@
   };
 
   const renderBoardPreview = (boardState) => {
-    const c = 44; // Use fixed cell size for preview
-    const g = 2;
+    const c = PREVIEW_CELL_SIZE;
+    const g = PREVIEW_GAP;
     let html = '';
     for (const piece of boardState) {
       for (const [dx, dy] of piece.cells) {
